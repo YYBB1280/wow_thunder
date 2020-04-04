@@ -1,88 +1,22 @@
 # -*- coding: utf-8 -*-
 
-import re
-import json
-import requests
-from bs4 import BeautifulSoup
+"""各职责dkp分数"""
+
 from consts import *
-
-
-TANK_PLAYERS = ['小豆兜', '朝花夕拾', '暗夜王者', '北理老蚊子']
-URL = 'http://webdkp.wowcat.net/dkp/%E9%9B%B7%E9%9C%86%E4%B9%8B%E5%87%BB/%E9%95%B6%E9%87%91%E7%8E%AB%E7%91%B0/{page}?t=1'
-FRESHMAN_RATIO = 0.8
-
-
-class Player(object):
-
-    def __init__(self, user_id, dkp, name, occupation):
-        self.use_id = user_id
-        self.dkp = dkp
-        self.name = name
-        self.occupation = occupation
-
-    def __repr__(self):
-        return 'Play<name=%s>' % self.name
-
-
-def get_url_data(url):
-    resp = requests.get(url)
-    if resp.status_code != 200:
-        print '请求出错, 重试'
-
-    soup = BeautifulSoup(resp.content, 'html.parser')
-    nodes = soup.find_all('script', type='text/javascript')
-    data = ''
-    for node in nodes:
-        data = node.get_text()
-        if isinstance(data, unicode):
-            data = data.encode('utf8').strip()
-        if data.startswith('table = new'):
-            break
-        else:
-            data = ''
-    return data
-
-
-def get_players(data):
-    players = []
-    for line in data.split('\n'):
-        line = line.strip()
-        if line.startswith('table.Add'):
-            matches = re.search(r'(\{.+\})', line)
-            if not matches:
-                continue
-            play_info = json.loads(matches.groups()[0])
-            user_id, dkp, name, occupation = play_info.get('userid'), float(play_info.get('dkp')), play_info.get('player').encode('utf8'), play_info.get('playerclass')
-            if not user_id and dkp and name and occupation:
-                continue
-            players.append(Player(user_id, dkp, name, occupation))
-    return players
+from config import *
+from models import get_players
 
 
 def go():
-    url = URL.format(page=1)
-    data = get_url_data(url)
-    if not data:
-        print '未抓取到数据'
-
-    page, pages = 1, 1
-    for line in data.split('\n'):
-        line = line.strip()
-        if line.startswith('table.SetPageData'):
-            page, pages = map(int, re.findall('(\d+)', line))
-
-    players = get_players(data)
-    if pages > 1:
-        for p in range(2, pages + 1):
-            url = URL.format(page=p)
-            data = get_url_data(url)
-            players.extend(get_players(data))
+    players = get_players()
 
     tank_dkps = []
     ad_dkps = []
     ap_dkps = []
     healer_dkps = []
     for p in players:
+        if p.name in EXCLUDE_PLAYERS:
+            continue
         if p.name in TANK_PLAYERS:
             tank_dkps.append(p.dkp)
         elif p.occupation in HEALER_OCCUPATIONS:
